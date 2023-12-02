@@ -3,7 +3,7 @@
 #include <string.h> //for memcmp
 #include <wmmintrin.h>
 
-static unsigned char key_schedule[340];
+static unsigned char key_schedule[208];
 
 void KEY_192_ASSIST(__m128i *temp1, __m128i *temp2, __m128i *temp3) {
   __m128i temp4;
@@ -127,6 +127,7 @@ int aes128_self_test(void) {
     memset(plain + input_length, 0, 16 - input_length);
   }
   AES_192_Key_Expansion(enc_key, key_schedule);
+
   for(int i=0;i<sizeof(plain);i++){
     printf("%c",plain[i]);
   }

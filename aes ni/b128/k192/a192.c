@@ -80,53 +80,82 @@ void aes192_load_key(unsigned char *enc_key){
 }
 
 
-void aes192_enc(unsigned char *plainText, unsigned char *cipherText) {
-    __m128i m = _mm_loadu_si128((__m128i *)plainText);
-    DO_ENC_BLOCK(m, key_schedule);
-    _mm_storeu_si128((__m128i *)cipherText, m);
+void aes192_enc(unsigned char *plainText, size_t plainText_len, unsigned char *cipherText) {
+    for (size_t i = 0; i < plainText_len; i += 16) {
+        __m128i m = _mm_loadu_si128((__m128i *)(plainText + i));
+        DO_ENC_BLOCK(m, key_schedule);
+        _mm_storeu_si128((__m128i *)(cipherText + i), m);
+    }
 }
 
-void aes192_dec(unsigned char *cipherText, unsigned char *plainText) {
-    __m128i m = _mm_loadu_si128((__m128i *)cipherText);
-    DO_DEC_BLOCK(m, key_schedule);
-    _mm_storeu_si128((__m128i *)plainText, m);
+void aes192_dec(unsigned char *cipherText, size_t cipherText_len, unsigned char *plainText) {
+    for (size_t i = 0; i < cipherText_len; i += 16) {
+        __m128i m = _mm_loadu_si128((__m128i *)(cipherText + i));
+        DO_DEC_BLOCK(m, key_schedule);
+        _mm_storeu_si128((__m128i *)(plainText + i), m);
+    }
 }
+void pad_data(unsigned char *data, size_t original_len, size_t *padded_len) {
+    size_t padding_size = 16 - (original_len % 16);
+    *padded_len = original_len + padding_size;
+    for (size_t i = original_len; i < *padded_len; i++) {
+        data[i] = (unsigned char)padding_size;
+    }
+}
+
+void remove_padding(unsigned char *data, size_t *data_len) {
+    if (*data_len == 0) return;
+    
+    unsigned char padding_value = data[*data_len - 1];
+    if (padding_value > 16) padding_value = 0; // Invalid padding
+    *data_len -= padding_value;
+}
+
 
 int aes192_self_test(void) {
-    unsigned char plain[16];
+    unsigned char plain[1000000]; // Buffer size increased for padding
+    size_t padded_length, decrypted_length;
+    // unsigned char enc_key[16];
     unsigned char enc_key[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-    unsigned char computed_cipher[16];
-    unsigned char computed_plain[16];
+    unsigned char computed_cipher[1000000];
+    unsigned char computed_plain[1000000];
     int out = 0;
 
-    printf("Enter plaintext (16 characters): ");
-    scanf("%s", plain);
+    printf("Enter plaintext: ");
+    fgets((char *)plain, 1000000, stdin);
+    size_t input_length = strlen((const char *)plain);
 
-    int input_length = strlen((const char *)plain);
-    if (input_length < 16) {
-        memset(plain + input_length, 0, 16 - input_length);
+    if (input_length > 0 && plain[input_length - 1] == '\n') {
+        plain[--input_length] = '\0'; // Remove newline character if present
     }
 
+    pad_data(plain, input_length, &padded_length);
     aes192_load_key(enc_key);
-    aes192_enc(plain, computed_cipher);
-    aes192_dec(computed_cipher, computed_plain);
+
+    aes192_enc(plain, padded_length, computed_cipher);
+    
+    aes192_dec(computed_cipher, padded_length, computed_plain);
+    
+    decrypted_length = padded_length;
+    remove_padding(computed_plain, &decrypted_length);
 
     printf("Computed Cipher: ");
-    for (int i = 0; i < sizeof(computed_cipher); i++) {
+    for (size_t i = 0; i < padded_length; i++) {
         printf("%02x ", computed_cipher[i]);
     }
     printf("\n");
 
     printf("Computed Plain Text: ");
-    for (int i = 0; i < sizeof(computed_plain); i++) {
+    for (size_t i = 0; i < decrypted_length; i++) {
         printf("%c", computed_plain[i]);
     }
     printf("\n");
 
-    if (memcmp(plain, computed_plain, sizeof(plain))) {
+    // Compare decrypted text with original plaintext
+    if (memcmp(plain, computed_plain, input_length) != 0) {
         out |= 2;
     }
 
@@ -134,7 +163,6 @@ int aes192_self_test(void) {
 }
 
 int main() {
-    int result = aes192_self_test();
-    printf("Test Result: %d\n", result);
+    aes192_self_test();
     return 0;
 }
